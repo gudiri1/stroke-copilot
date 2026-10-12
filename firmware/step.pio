@@ -1,0 +1,35 @@
+; One STEP pulse per iteration, period supplied by the CPU through the TX FIFO.
+;
+; `pull noblock` loads OSR from the FIFO, or copies X into OSR when the FIFO is
+; empty, so the CPU only writes when the commanded speed changes. The state
+; machine keeps pulsing at the last period in between, which is what makes the
+; pulse train jitter-free regardless of what the USB stack is doing.
+;
+; Clock: sysclk 125 MHz with clkdiv 125.0 -> 1 MHz, so one cycle is 1 us.
+; Fixed overhead per iteration: pull 1 + mov 1 + mov 1 + set[9] 10 + set 1 = 14 us.
+; The CPU therefore writes y = period_us - 14.
+
+.program step
+
+.wrap_target
+    pull noblock            ; OSR <- FIFO, else OSR <- X (keeps the last period)
+    mov x, osr              ; re-latch so the next empty pull repeats it
+    mov y, x
+    set pins, 1 [9]         ; STEP high for 10 us; TMC2209 needs >= 100 ns
+    set pins, 0
+delay:
+    jmp y-- delay           ; 1 us per iteration
+.wrap
+
+% c-sdk {
+static inline void step_program_init(PIO pio, uint sm, uint offset, uint pin) {
+    pio_gpio_init(pio, pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
+
+    pio_sm_config c = step_program_get_default_config(offset);
+    sm_config_set_set_pins(&c, pin, 1);
+    sm_config_set_clkdiv(&c, 125.0f);       // 1 MHz: one cycle = 1 us
+
+    pio_sm_init(pio, sm, offset, &c);
+}
+%}
