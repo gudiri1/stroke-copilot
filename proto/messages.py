@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, asdict
 
 import msgpack
 
-__all__ = ["Frame", "Tip", "Guidance", "Cmd", "TOPICS", "CONSTANTS", "pack", "unpack"]
+__all__ = ["Frame", "Tip", "Guidance", "View", "Cmd", "TOPICS", "CONSTANTS", "pack", "unpack"]
 
 # Constants come straight from the model so no process carries its own copy.
 CONSTANTS = {'frame_rate_hz': 7.5, 'frame_period_ms': 133.3, 'frame_w': 512, 'frame_h': 512, 'px_mm': 0.39, 'advance_max_mm_s': 3.0, 'watchdog_ms': 100, 'microstep_nm': 19635}
@@ -24,6 +24,8 @@ class Frame:
     fmt: str = ""
     px_mm: float = 0.0
     source: str = ""
+    carm_alpha: float = 0.0
+    carm_beta: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -40,6 +42,8 @@ class Tip:
     conf: float = 0.0
     wire_px: list = field(default_factory=list)
     latency_ms: float = 0.0
+    carm_alpha: float = 0.0
+    carm_beta: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -67,6 +71,22 @@ class Guidance:
         return cls(**{k: v for k, v in d.items() if k in cls.__annotations__})
 
 @dataclass
+class View:
+    seq: int = 0
+    t_ns: int = 0
+    alpha_deg: float = 0.0
+    beta_deg: float = 0.0
+    score: float = 0.0
+    reason: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "View":
+        return cls(**{k: v for k, v in d.items() if k in cls.__annotations__})
+
+@dataclass
 class Cmd:
     seq: int = 0
     t_ns: int = 0
@@ -87,6 +107,9 @@ TOPICS = {
     "tip": Tip,
     "guidance": Guidance,
     "cmd": Cmd,
+    "view": View,
+    "cmd_gated": Cmd,
+    "view_gated": View,
 }
 
 

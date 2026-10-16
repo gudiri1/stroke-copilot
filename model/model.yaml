@@ -41,6 +41,10 @@ types:
     fmt: str                  # "mono8"
     px_mm: f32
     source: str               # sofa | replay | camera | carm
+    # Every message carries the geometry it was produced under, so a consumer
+    # never has to join topics to know how to read its own pixels.
+    carm_alpha: f32           # LAO positive, RAO negative, degrees
+    carm_beta: f32            # CRA positive, CAU negative, degrees
     # payload: raw bytes, second ZMQ part, w*h for mono8
 
   Tip:
@@ -50,6 +54,8 @@ types:
     conf: f32                 # 0..1, the number the safety gate consumes
     wire_px: list             # [[u, v], ...] distal to proximal, may be empty
     latency_ms: f32
+    carm_alpha: f32           # copied from the frame this came from
+    carm_beta: f32
 
   Guidance:
     seq: u64
@@ -60,6 +66,14 @@ types:
     state: str                # on_path | off_path | unknown
     event: str                # "" | bifurcation_ahead | wrong_branch | target_reached | handover
     conf: f32
+
+  View:
+    seq: u64
+    t_ns: u64
+    alpha_deg: f32            # requested LAO/RAO
+    beta_deg: f32             # requested CRA/CAU
+    score: f32                # 0..1, how well this view resolves the next bifurcation
+    reason: str               # "" | ambiguous_bifurcation | foreshortened | operator
 
   Cmd:
     seq: u64                  # the frame this command answers
@@ -73,6 +87,9 @@ flows:
   tip:      {type: Tip,      from: SC.EYE,  to: [SC.BRN],         rate_hz: 7.5}
   guidance: {type: Guidance, from: SC.BRN,  to: [SC.OUT],         rate_hz: 7.5}
   cmd:      {type: Cmd,      from: SC.BRN,  to: [SC.GATE],        rate_hz: 7.5}
+  view:     {type: View,     from: SC.BRN,  to: [SC.GATE],        rate_hz: 7.5}
+  cmd_gated:  {type: Cmd,  from: SC.GATE, to: [SC.DRV],  rate_hz: 7.5}
+  view_gated: {type: View, from: SC.GATE, to: [SC.CARM], rate_hz: 7.5}
 
 # --- containment -----------------------------------------------------------
 # owner: EMB | AI | BIZ        stage: cut-line stage it must survive
@@ -81,7 +98,7 @@ blocks:
   SC:
     name: Stroke Co-pilot
     kind: system
-    children: [SC.SRC, SC.EYE, SC.MAP, SC.BRN, SC.OUT, SC.GATE, SC.DRV, SC.TRAIN]
+    children: [SC.SRC, SC.EYE, SC.MAP, SC.BRN, SC.OUT, SC.GATE, SC.DRV, SC.CARM, SC.TRAIN]
 
   SC.SRC:
     name: Source adapters
@@ -188,12 +205,13 @@ blocks:
     owner: EMB
     stage: 3
     status: planned
-    ports: {in: [cmd, confidence, override], out: [gated cmd]}
-    children: [GATE.CONF, GATE.DEV, GATE.WDG, GATE.RATE, GATE.HAND]
+    ports: {in: [cmd, view, confidence, override], out: [gated cmd, gated view]}
+    children: [GATE.CONF, GATE.DEV, GATE.WDG, GATE.RATE, GATE.LOCK, GATE.HAND]
     questions: [T4]
     evidence: [P02]
-    note: The only path from the AI to anything that moves. Five conditions in
-      one place, every one of them trippable on the table.
+    note: The only path from the AI to anything that moves - and there are two
+      things that move, the wire and the gantry. Five conditions in one place,
+      every one of them trippable on the table.
 
   GATE.CONF: {name: Confidence floor, owner: EMB, stage: 3, status: planned}
   GATE.DEV:
@@ -208,7 +226,58 @@ blocks:
       leaves the room, it becomes the referee.
   GATE.WDG:  {name: Watchdog,         owner: EMB, stage: 3, status: planned}
   GATE.RATE: {name: Rate limit,       owner: EMB, stage: 3, status: planned}
+  GATE.LOCK:
+    name: Motion interlock
+    owner: EMB
+    stage: 2
+    status: planned
+    note: The gantry only moves while the wire is stationary, and the wire only
+      moves while the gantry is still. Two actuators that can both move at once
+      around a patient is the kind of thing that ends a conversation with a
+      clinical reviewer, and the rule costs one line.
   GATE.HAND: {name: Handover,         owner: EMB, stage: 3, status: planned, questions: [T4]}
+
+  SC.CARM:
+    name: C-arm control
+    owner: EMB
+    stage: 2
+    status: planned
+    ports: {in: [gated view], out: [alpha, beta]}
+    children: [CARM.SCORE, CARM.OPT, CARM.EXEC]
+    questions: [Q4]
+    evidence: [P04, P09, P10]
+    note: The second actuator. A projection in which two branches overlap is
+      ambiguous no matter how good the perception is, so the angle is part of
+      the control problem and not a camera setting. This is what makes
+      "minimal reliance on vasculature boundaries" reachable - the information
+      has to come from the projection instead of from a registered 3D model.
+
+  CARM.SCORE:
+    name: View score
+    owner: EMB
+    stage: 2
+    status: planned
+    note: Foreshortening of the branch we are entering, angular separation from
+      its sibling, and clutter from every other segment. One number per
+      candidate angle, each term explainable on its own.
+
+  CARM.OPT:
+    name: Optimal view search
+    owner: EMB
+    stage: 2
+    status: planned
+    note: Grid over LAO/RAO and CRA/CAU. A few hundred evaluations, milliseconds,
+      deterministic. No learning needed for the expert; the student learns to
+      ask for a different view when its own confidence is low.
+
+  CARM.EXEC:
+    name: Gantry motion
+    owner: EMB
+    stage: 4
+    status: open
+    note: In simulation the angle is a camera parameter and free. Moving a real
+      gantry with a patient on the table is a safety-regulated motion and a
+      separate certification problem. Say that rather than implying we move it.
 
   SC.DRV:
     name: Driver interface
@@ -319,9 +388,12 @@ challenge:
       answered_by: [GATE.DEV, BRN.EXPERT, BRN.STUDENT]
     carm:
       text: Auto-adjust the C-arm
-      answered_by: []
-      note: Not addressed yet. Cheap in simulation, where the projection angle is
-        a camera parameter. Decide at the event, not before.
+      answered_by: [SC.CARM, CARM.SCORE, CARM.OPT]
+      note: Not a fourth feature bolted on. A projection where two branches
+        overlap cannot be disambiguated by any policy, so choosing the angle is
+        how a system navigates without leaning on a registered 3D roadmap.
+        Expert picks the angle analytically from the model; student learns to
+        request a new view when its own confidence drops.
     paper:
       text: Aiming for a scientific paper on autonomous endovascular robotics
       answered_by: [TRAIN.EVAL]

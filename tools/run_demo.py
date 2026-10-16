@@ -40,7 +40,7 @@ def main() -> int:
     procs = [subprocess.Popen([sys.executable, *n], cwd=ROOT, env=env) for n in nodes]
     time.sleep(0.6)                      # let the broker bind before anyone connects
 
-    later = [["src/eyes_stub.py"], ["src/brain.py"]]
+    later = [["src/eyes_stub.py"], ["src/brain.py"], ["src/gate.py"]]
     if not a.no_viewer:
         later.append(["src/viewer.py"])
     src = ["src/source_replay.py"] + (["--dir", str(a.dir)] if a.dir else [])

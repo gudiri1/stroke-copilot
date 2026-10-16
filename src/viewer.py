@@ -42,29 +42,33 @@ def compose(img: np.ndarray, tip, guid) -> np.ndarray:
         cv2.circle(vis, (x, y), 9, colour, 2, cv2.LINE_AA)
         cv2.line(vis, (x - 14, y), (x - 20, y), colour, 1, cv2.LINE_AA)
 
-    bar = vis.shape[0] - 46
+    bar = vis.shape[0] - 66      # two rows: 512 px will not hold one
     cv2.rectangle(vis, (0, bar), (vis.shape[1], vis.shape[0]), (28, 22, 18), -1)
     f = cv2.FONT_HERSHEY_SIMPLEX
 
     conf = tip.conf if tip else 0.0
-    cv2.putText(vis, f"conf {conf:4.2f}", (12, bar + 29), f, 0.52, INK, 1, cv2.LINE_AA)
-    cv2.rectangle(vis, (108, bar + 16), (108 + 90, bar + 26), (70, 62, 56), -1)
-    cv2.rectangle(vis, (108, bar + 16), (108 + int(90 * conf), bar + 26),
+    cv2.putText(vis, f"conf {conf:4.2f}", (12, bar + 24), f, 0.5, INK, 1, cv2.LINE_AA)
+    cv2.rectangle(vis, (104, bar + 12), (104 + 96, bar + 22), (70, 62, 56), -1)
+    cv2.rectangle(vis, (104, bar + 12), (104 + int(96 * conf), bar + 22),
                   GREEN if conf >= 0.45 else ACCENT, -1)
 
     if guid:
         txt = f"{guid.state}"
         if guid.next:
-            txt += f"  ->{guid.next}  {guid.dist_px}px"
-        cv2.putText(vis, txt, (214, bar + 29), f, 0.52, INK, 1, cv2.LINE_AA)
+            txt += f"  ->{guid.next} {guid.dist_px}px"
+        cv2.putText(vis, txt[:28], (214, bar + 24), f, 0.5, INK, 1, cv2.LINE_AA)
         if guid.event:
             cv2.putText(vis, guid.event.replace("_", " ").upper(),
                         (12, 30), f, 0.68,
                         ACCENT if guid.event in ("wrong_branch", "handover") else GREEN,
                         2, cv2.LINE_AA)
     if tip:
-        cv2.putText(vis, f"{tip.latency_ms:.0f} ms", (vis.shape[1] - 86, bar + 29),
-                    f, 0.52, (150, 150, 150), 1, cv2.LINE_AA)
+        cv2.putText(vis, f"C-arm  LAO/RAO {tip.carm_alpha:+.0f}   CRA/CAU {tip.carm_beta:+.0f}",
+                    (12, bar + 50), f, 0.46, STEEL, 1, cv2.LINE_AA)
+        lat = f"{tip.latency_ms:.0f} ms"
+        tw = cv2.getTextSize(lat, f, 0.46, 1)[0][0]
+        cv2.putText(vis, lat, (vis.shape[1] - tw - 12, bar + 50), f, 0.46,
+                    (150, 150, 150), 1, cv2.LINE_AA)
     return vis
 
 

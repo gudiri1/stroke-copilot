@@ -52,8 +52,6 @@ def main() -> int:
     a = ap.parse_args()
 
     g = scene.load_graph()
-    access = tuple(g["nodes"][g["target_route"][0]])
-
     sub, pub = Sub(["frame"]), Pub()
     prev_tip, n = None, 0
     print("eyes_stub: running (threshold placeholder, replace with the model)", flush=True)
@@ -65,6 +63,10 @@ def main() -> int:
                 break
             _, f, payload = got
             img = np.frombuffer(payload, dtype=np.uint8).reshape(f.h, f.w)
+            # The access point moves in the image when the gantry moves, so it
+            # is looked up per frame rather than cached once.
+            access = scene.node_px(g, f.carm_alpha, f.carm_beta,
+                                   f.w, f.h)[g["target_route"][0]]
 
             tip, poly, cov = detect(img, access)
             if tip is None:
@@ -77,7 +79,8 @@ def main() -> int:
 
             pub.send("tip", M.Tip(
                 seq=f.seq, t_ns=now_ns(), tip_px=tip_out, conf=round(conf, 3),
-                wire_px=poly, latency_ms=round((now_ns() - f.t_capture_ns) / 1e6, 2)))
+                wire_px=poly, latency_ms=round((now_ns() - f.t_capture_ns) / 1e6, 2),
+                carm_alpha=f.carm_alpha, carm_beta=f.carm_beta))
             n += 1
             if a.count and n >= a.count:
                 break
