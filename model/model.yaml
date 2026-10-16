@@ -388,7 +388,7 @@ challenge:
       answered_by: [GATE.DEV, BRN.EXPERT, BRN.STUDENT]
     carm:
       text: Auto-adjust the C-arm
-      answered_by: [SC.CARM, CARM.SCORE, CARM.OPT]
+      answered_by: [SC.CARM, CARM.SCORE, CARM.OPT, CARM.EXEC, GATE.LOCK]
       note: Not a fourth feature bolted on. A projection where two branches
         overlap cannot be disambiguated by any policy, so choosing the angle is
         how a system navigates without leaning on a registered 3D roadmap.

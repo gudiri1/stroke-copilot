@@ -28,12 +28,20 @@ and the wire deliberately takes the wrong branch first, so the console prints
 the product in six lines:
 
 ```
-[   5] bifurcation_ahead  ACCESS -> BIF1   49.0 px  conf 0.61
-[  15] wrong_branch       BIF1 -> LEFT    138.9 px  conf 0.82
-[  39] bifurcation_ahead  ACCESS -> BIF1   18.0 px  conf 0.64
-[  79] target_reached     RIGHT -> TARGET  19.9 px  conf 0.81
-[  83] handover —         conf 0.00
+[   8] view is ambiguous at BIF1: separation 0.00 -> 0.54 at alpha -70 beta +40
+[   8] bifurcation_ahead  ACCESS -> BIF1   46.4 px  conf 0.76
+[   8] view  -> alpha -70  beta +40  score 0.70  (ambiguous_bifurcation)
+[  16] wrong_branch       BIF1 -> LEFT    77.3 px  conf 0.88
+[  79] target_reached     RIGHT -> TARGET  17.6 px  conf 0.81
+[  83] handover — conf 0.00
 ```
+
+Read the first three lines together: from the frontal view the two branches at
+`BIF1` project onto the same pixels, so the planner asks for an angle where
+they do not, the gate lets the gantry move because the wire is standing still,
+and the wrong turn at line four is visible only because the view changed. That
+is what "auto-adjust the C-arm" buys — not a nicer picture, but a decision that
+can be made at all.
 
 Overlay frames land in `out/`. With a display, `src/viewer.py` opens a window
 instead.
@@ -44,9 +52,9 @@ instead.
 |---|---|
 | Clone expert navigation from **manual or simulated** runs | The rule-based planner is the simulated expert; its episodes are the demonstrations |
 | Let the policy self-play in simulation | stEVE on SOFA, the endovascular RL environment from FAU |
-| Navigate with **minimal reliance on vasculature boundaries** | The expert sees the vessel graph. The student never does |
+| Navigate with **minimal reliance on vasculature boundaries** | The expert sees the vessel graph. The student never does — which is why it must be able to move the camera |
 | Fuse RL and IL, **keeping expert-like safety** | The gate compares student against expert every frame and vetoes beyond a bound |
-| Auto-adjust the C-arm | Not addressed yet. Cheap in simulation; decide at the event |
+| Auto-adjust the C-arm | 703 candidate angles scored per bifurcation; the gate releases the move only while the wire is still |
 | Aiming for a scientific paper | The evaluation table, not the demo, is the deliverable for that |
 
 The expert never leaves the room. It stops driving and becomes the referee.
@@ -57,10 +65,27 @@ Four interchangeable image sources publish one `frame` contract. Everything
 downstream is fixed: **Eyes** segments the wire and reports a tip with a
 confidence, **Roadmap** holds the vessel tree as a graph, and **Brain** holds
 two policies — a rule-based **expert** with the graph and a learned **student**
-without it. Both emit `cmd`; the **safety gate** decides which reaches the
-motor, and it is the only path to anything that moves. Swapping a source
-adapter changes nothing below it — the hedge against not knowing what the
-organizers supply.
+without it. Both emit `cmd`, and the expert also emits `view` when the branch
+ahead is unreadable from the current angle. The **safety gate** decides what
+reaches the two actuators, the wire driver and the gantry, and it is the only
+path to either. Swapping a source adapter changes nothing below it — the hedge
+against not knowing what the organizers supply.
+
+## Trip the gate
+
+Six conditions that cannot be demonstrated are a slide, not an argument. With
+the demo running, `tools/fault.py` plays a misbehaving student on the same
+topics the real policies use:
+
+```sh
+make demo &
+python3 tools/fault.py deviation    # [  21] VETO cmd  +4.00 mm/s — deviation 4.00 mm/s
+python3 tools/fault.py rate         # [  50] CLAMP cmd +4.40 -> +3.00 mm/s — rate limit
+python3 tools/fault.py interlock    # [  75] VETO view -70/+40 — wire is moving at 3.00 mm/s
+```
+
+There is no path around the gate, which is why injecting a command from
+outside the system changes nothing about who is allowed to move.
 
 - [Architecture, two views](https://claude.ai/artifact/XABPeZTARPYqgvEH36t4pr) — where it sits in the angio suite, and how a frame flows
 - [System model, navigable](https://claude.ai/artifact/GkSo3vC4jKntrrYB1cZU8u) — click into any block, down to the pin map

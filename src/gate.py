@@ -49,7 +49,7 @@ def main() -> int:
     handover = False
     last_cmd_ns = now_ns()
     advance = 0.0
-    n = vetoes = 0
+    n = vetoes = clamps = 0
     print("gate: conf · deviation · watchdog · rate · interlock · handover", flush=True)
 
     try:
@@ -99,6 +99,10 @@ def main() -> int:
                 if reason and want != 0.0:
                     vetoes += 1
                     print(f"  [{m.seq:4d}] VETO cmd  {want:+.2f} mm/s — {reason}", flush=True)
+                elif not reason and abs(out - want) > 1e-6:
+                    clamps += 1
+                    print(f"  [{m.seq:4d}] CLAMP cmd {want:+.2f} -> {out:+.2f} mm/s "
+                          f"— rate limit {C['advance_max_mm_s']} mm/s", flush=True)
                 advance = out
                 pub.send("cmd_gated", M.Cmd(seq=m.seq, t_ns=now_ns(),
                                             advance_mm_s=out, deadman_seq=m.seq))
@@ -122,7 +126,7 @@ def main() -> int:
     finally:
         sub.close()
         pub.close()
-    print(f"gate: {n} commands, {vetoes} vetoes", flush=True)
+    print(f"gate: {n} commands, {vetoes} vetoes, {clamps} clamps", flush=True)
     return 0
 
 
