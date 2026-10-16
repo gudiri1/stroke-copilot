@@ -10,7 +10,8 @@
 
 meta:
   project: Stroke Co-pilot
-  track: "Robotics & AI Hackathon 2026 — Challenge 1, Improve Endovascular Procedures"
+  track: "Robotics & AI Hackathon 2026 — Challenge 3, Autonomous Image-Guided Control
+          for Endovascular Procedures"
   framing: Research prototype. Not a medical device. No patient data at any stage.
   transport: ZeroMQ PUB/SUB over ipc://, msgpack header plus optional raw payload part
   endpoint: ipc:///tmp/stroke-copilot
@@ -80,7 +81,7 @@ blocks:
   SC:
     name: Stroke Co-pilot
     kind: system
-    children: [SC.SRC, SC.EYE, SC.MAP, SC.BRN, SC.OUT, SC.GATE, SC.DRV]
+    children: [SC.SRC, SC.EYE, SC.MAP, SC.BRN, SC.OUT, SC.GATE, SC.DRV, SC.TRAIN]
 
   SC.SRC:
     name: Source adapters
@@ -131,19 +132,43 @@ blocks:
     name: Brain
     owner: AI
     stage: 1
-    status: planned
+    status: building
     ports: {in: [tip, graph], out: [guidance, cmd]}
-    children: [BRN.MATCH, BRN.PLAN, BRN.FSM, BRN.EVT]
+    children: [BRN.EXPERT, BRN.STUDENT]
     questions: [T2, T4]
     evidence: [P03]
-    note: A state machine on the graph. No learned policy on the critical path
-      for the demo; a policy that cannot explain itself is the wrong thing to
-      put in front of this jury.
+    note: Two policies, not one. The expert sees the vessel graph, which is
+      privileged information a real system does not have. The student sees only
+      what the image gives. Both emit cmd, and the gate decides which one
+      reaches the motor.
 
-  BRN.MATCH: {name: Graph matcher,  owner: AI, stage: 1, status: planned}
-  BRN.PLAN:  {name: Path,           owner: AI, stage: 1, status: planned}
-  BRN.FSM:   {name: State machine,  owner: AI, stage: 1, status: planned}
-  BRN.EVT:   {name: Events,         owner: AI, stage: 1, status: planned, questions: [T4]}
+  BRN.EXPERT:
+    name: Expert planner
+    owner: AI
+    stage: 1
+    status: done
+    ports: {in: [tip, graph], out: [guidance, cmd]}
+    children: [BRN.MATCH, BRN.PLAN, BRN.FSM, BRN.EVT]
+    note: Rule-based, deterministic, explainable. Generates the demonstrations
+      the student is cloned from, and keeps running at inference as the
+      reference the gate compares against.
+
+  BRN.MATCH: {name: Graph matcher,  owner: AI, stage: 1, status: done}
+  BRN.PLAN:  {name: Path,           owner: AI, stage: 1, status: done}
+  BRN.FSM:   {name: State machine,  owner: AI, stage: 1, status: done}
+  BRN.EVT:   {name: Events,         owner: AI, stage: 1, status: done, questions: [T4]}
+
+  BRN.STUDENT:
+    name: Learned policy
+    owner: AI
+    stage: 2
+    status: planned
+    ports: {in: [tip], out: [cmd]}
+    questions: [T2]
+    evidence: [P03]
+    note: Behavioural cloning first, RL fine-tuning after. Never receives the
+      vessel graph, which is what "minimal reliance on vasculature boundaries"
+      means in practice.
 
   SC.OUT:
     name: Operator output
@@ -164,12 +189,23 @@ blocks:
     stage: 3
     status: planned
     ports: {in: [cmd, confidence, override], out: [gated cmd]}
-    children: [GATE.CONF, GATE.WDG, GATE.RATE, GATE.HAND]
+    children: [GATE.CONF, GATE.DEV, GATE.WDG, GATE.RATE, GATE.HAND]
     questions: [T4]
     evidence: [P02]
-    note: The only path from the AI to anything that moves.
+    note: The only path from the AI to anything that moves. Five conditions in
+      one place, every one of them trippable on the table.
 
   GATE.CONF: {name: Confidence floor, owner: EMB, stage: 3, status: planned}
+  GATE.DEV:
+    name: Expert deviation
+    owner: EMB
+    stage: 2
+    status: planned
+    questions: [T4]
+    note: Compares the student's command against what the expert would have done
+      on this frame and vetoes beyond a bound. This is the mechanism behind
+      "keeping expert-like safety while learning new skills" - the expert never
+      leaves the room, it becomes the referee.
   GATE.WDG:  {name: Watchdog,         owner: EMB, stage: 3, status: planned}
   GATE.RATE: {name: Rate limit,       owner: EMB, stage: 3, status: planned}
   GATE.HAND: {name: Handover,         owner: EMB, stage: 3, status: planned, questions: [T4]}
@@ -192,6 +228,47 @@ blocks:
             note: "StallGuard4 needs a minimum velocity. 153 microsteps/s is about
                    2.9 rpm, almost certainly below it. Keep the load cell."}
   FW.PINS: {name: Pin map,            owner: EMB, stage: 3, status: planned}
+
+# --- offline learning pipeline --------------------------------------------
+  SC.TRAIN:
+    name: Learning pipeline
+    owner: AI
+    stage: 2
+    status: planned
+    children: [TRAIN.DEMO, TRAIN.BC, TRAIN.RL, TRAIN.EVAL]
+    note: Offline. Nothing in here runs during a procedure.
+
+  TRAIN.DEMO:
+    name: Demonstrations
+    owner: AI
+    stage: 2
+    status: planned
+    note: Expert episodes recorded in simulation. "Manual or simulated runs" is
+      the challenge's own wording, so a scripted expert is in scope.
+
+  TRAIN.BC:
+    name: Behavioural cloning
+    owner: AI
+    stage: 2
+    status: planned
+    note: Supervised, minutes on a CPU. The floor we can deliver with no GPU.
+
+  TRAIN.RL:
+    name: RL fine-tuning
+    owner: AI
+    stage: 3
+    status: open
+    note: stEVE reports 6h39min for BasicWireNav on capable hardware. Needs a
+      GPU, which is still an open question to the organizers.
+
+  TRAIN.EVAL:
+    name: Evaluation
+    owner: AI
+    stage: 2
+    status: planned
+    note: Expert vs BC vs BC+RL on success rate, time to target, wrong-branch
+      events and path length, over N random arches. For a jury aiming at a
+      paper this table outranks the live demo.
 
 # --- open questions --------------------------------------------------------
 questions:
@@ -222,3 +299,29 @@ evidence:
   P12: Behind the wall of industry payments
   P13: novel_lolo — not read yet
   P14: 1-s2.0-S2772930326010574 — not read yet
+
+# --- what the challenge asks, and what answers it -------------------------
+challenge:
+  title: Autonomous Image-Guided Control for Endovascular Procedures
+  number: 3          # renumbered on the site; our docs said Challenge 1 until 16 Oct
+  asks:
+    imitation:
+      text: Clone expert guidewire and catheter navigation from manual or simulated runs
+      answered_by: [BRN.EXPERT, TRAIN.DEMO, TRAIN.BC]
+    rl:
+      text: Let the policy self-play in simulation to generate new, richer datasets
+      answered_by: [SRC.SOFA, TRAIN.RL]
+    loop:
+      text: Close the loop, navigate with minimal reliance on vasculature boundaries
+      answered_by: [BRN.STUDENT, SC.GATE, SC.DRV]
+    fuse:
+      text: One architecture combining RL with imitation learning, keeping expert-like safety
+      answered_by: [GATE.DEV, BRN.EXPERT, BRN.STUDENT]
+    carm:
+      text: Auto-adjust the C-arm
+      answered_by: []
+      note: Not addressed yet. Cheap in simulation, where the projection angle is
+        a camera parameter. Decide at the event, not before.
+    paper:
+      text: Aiming for a scientific paper on autonomous endovascular robotics
+      answered_by: [TRAIN.EVAL]

@@ -4,6 +4,26 @@ Source: the Stroke Co-pilot plan (Story / Scenarios / Business model / Market /
 Tech questions), reviewed 10 Oct 2026. This doc holds only what a jury will
 attack and what we still owe as an answer.
 
+## 0. What the brief asks, and the one sentence that answers it
+
+The challenge, renumbered to 3 on 16 Oct, is *Autonomous Image-Guided Control
+for Endovascular Procedures*. It asks for imitation learning, reinforcement
+learning, a closed loop with minimal reliance on vasculature boundaries, and a
+fusion of the two that keeps expert-like safety.
+
+**One sentence:** a rule-based expert that can see the vessel graph teaches a
+policy that cannot, and then stays in the room as the referee the gate compares
+against.
+
+That single mechanism answers three of their four bullets. The fourth, C-arm
+auto-adjustment, we have not addressed — say so rather than implying otherwise.
+
+**New jury question, and it is the obvious one:** *your expert is a script, not
+a physician.* The answer is in their own wording, "manual **or simulated**
+runs", plus the observation that distilling a privileged planner onto a student
+without the privileged input is standard practice. One sentence, said before
+they ask.
+
 ## 1. Contradiction to resolve before we pitch
 
 The Scenarios page labels **D (autonomous robot, remote supervision)** as "our
@@ -11,9 +31,11 @@ hackathon demo", while T2 on the Tech-questions page concludes **"lead the demo
 with the eyes, not full autonomy"**. Two pages of the same deck disagree about
 what we show on 24 Oct.
 
-Decision, and it drives everything else: demo = Eyes (live wire tracking,
-wrong-branch warning, voice) on fluoroscopy we control, with a closed-loop
-teaser on a Siemens robot only if T1 comes back positive.
+**Resolved on 16 Oct by the challenge text itself.** The brief asks for learned
+autonomy, so the demo is: expert closes the loop in simulation, student cloned
+from its runs, both compared in a table, gate vetoing the student live. The
+physical wire driver drops to a bonus, and scenario D stops being a contested
+label and becomes what we are actually building.
 
 ## 2. Questions the jury will ask
 
@@ -84,7 +106,23 @@ quoting.
   the legal manufacturer, that is an MDR statement and belongs there
   deliberately, not by accident.
 
-## 5. What the demo says that the slides cannot
+## 5. The table that matters more than the demo
+
+The brief ends with "aiming for a scientific paper". That tells us what the
+jury rewards: a reproducible method and an honest result, not a bigger claim.
+Bring one table.
+
+| | Success rate | Time to target | Wrong-branch events | Path length |
+|---|---|---|---|---|
+| Expert (sees the graph) | | | | |
+| BC student (no graph) | | | | |
+| BC + RL | | | | |
+
+Over N random vessel trees, same seeds for every row, N stated. An ablation
+with the gate switched off belongs beside it — that is the evidence that the
+safety envelope does something measurable rather than decorative.
+
+## 6. What the demo says that the slides cannot
 
 Three sentences that are true because the code runs, not because we claim them:
 
@@ -95,7 +133,7 @@ Three sentences that are true because the code runs, not because we claim them:
   pixel per correction.
 - The safety gate is one place with four conditions, and we can trip it live.
 
-## 6. Framing
+## 7. Framing
 
 Every claim stays inside "research prototype, not a medical device". Nothing in
 the deck may read as a claim of clinical efficacy or of an existing approval.

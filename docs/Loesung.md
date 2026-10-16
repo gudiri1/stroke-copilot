@@ -4,16 +4,42 @@ Technische Seite. Code, Topics, Dateinamen, Variablen: Englisch.
 
 ## 0. Leitentscheidung
 
+Zwei Entscheidungen, und die zweite ist am 16.10. gefallen, als die
+Challenge-Beschreibung konkret wurde.
+
 **SOFA ist die Anlage (plant), nicht die Kamera.**
 
 SOFA + BeamAdapter liefert Draht-Physik, Closed Loop und einen reproduzierbaren
 Benchmark. Die Perception wird auf **echten** Fluoroskopie-Frames trainiert und
-gemessen (CathAction: Silikon-Phantom + Schwein, keine Patientendaten).
-SOFA-Renderings werden nicht als Trainingsbilder benutzt.
-
+gemessen (CathAction). SOFA-Renderings werden nicht als Trainingsbilder benutzt.
 Grund: Pescio 2025 — 100 % in Simulation, 30 % an der echten Schweineleber. Die
-Lücke liegt in der Bildgebung, nicht in der Physik. Verworfen: Perception rein
-auf SOFA-Renderings.
+Lücke liegt in der Bildgebung, nicht in der Physik.
+
+**Der Experte fährt vor, der Student fährt nach, das Gate entscheidet.**
+
+Die Challenge verlangt Imitation Learning, RL und die Fusion aus beidem mit
+„expert-like safety". Unsere frühere Entscheidung — kein gelerntes Netz auf dem
+kritischen Pfad — war damit gegen die Aufgabe. **Korrigiert:** nicht die Policy
+weglassen, sondern sie einrahmen.
+
+- Der **Experte** ist der regelbasierte Planer. Er kennt den Gefäßgraphen und
+  den Zielpfad. Das ist privilegierte Information, die ein echtes System nicht
+  hat. Er erzeugt die Demonstrationen.
+- Der **Student** wird darauf geklont und bekommt den Graphen **nie**. Genau das
+  heißt „minimal reliance on vasculature boundaries" in der Praxis.
+- RL verbessert den Student über den Experten hinaus.
+- Das **Gate** vergleicht in jedem Frame den Befehl des Students mit dem, was
+  der Experte getan hätte, und vetot jenseits einer Schranke. Der Experte hört
+  auf zu fahren und wird zum Schiedsrichter.
+
+Ein Mechanismus, drei ihrer vier Punkte. Verworfen: reines RL from scratch
+(ohne GPU in drei Tagen nicht zu zeigen) und reines BC (lernt per Definition
+nichts Neues, ihr Punkt „let it get better on its own" bliebe offen).
+
+**Der Angriffspunkt, den wir selbst benennen:** unser Experte ist ein Skript,
+kein Arzt. Die Antwort steht in ihrem eigenen Text — „manual **or simulated**
+runs" — und Privileged-Expert-Distillation ist ein etabliertes Verfahren, kein
+Notbehelf.
 
 ## 1. Ebenen
 
@@ -119,11 +145,20 @@ HX711 mit Dehnungsmessstreifen bleibt: 80 SPS = 12,5 ms/Sample, Stopp in
 
 ## 6. Schnittlinie für den 24.10., 18:00
 
-1. `replay` + Eyes + Brain + Overlay + Voice auf echten Frames. Ohne
-   Veranstalter-Hardware, ohne Netz.
-2. `sofa` + Closed Loop in Simulation.
-3. `camera` auf dem Phantom mit dem Wire-Driver.
-4. `carm`, nur falls T1 positiv.
+1. **Experte schließt den Kreis.** `replay` oder synthetische Szene → Eyes →
+   Experte → Gate → Overlay. Ohne Veranstalter-Hardware, ohne Netz.
+2. **Demonstrationen und Klonen.** Experte fährt in Simulation, Episoden werden
+   aufgezeichnet, Student wird geklont. BC trainiert in Minuten auf CPU — diese
+   Stufe überlebt also, dass wir keine GPU haben.
+3. **Die Evaluationstabelle.** Experte gegen Student: Erfolgsrate, Zeit bis
+   Ziel, Falschast-Ereignisse, Pfadlänge, über N zufällige Gefäßbäume.
+4. **RL-Feintuning.** Nur mit GPU. stEVE nennt 6 h 39 min für einen Lauf.
+5. **Physischer Bench.** Phantom, Kamera, Wire-Driver — der Beleg, dass es
+   synthetische Bilder verlässt.
+6. `carm`, nur falls T1 positiv.
+
+Stufen 1 bis 3 beantworten zusammen schon drei der vier Punkte. Der
+Wire-Driver ist damit von Pflicht auf Zugabe gerutscht.
 
 ## 7. Bekannte Lücken
 
@@ -136,6 +171,10 @@ HX711 mit Dehnungsmessstreifen bleibt: 80 SPS = 12,5 ms/Sample, Stopp in
 - 2D-2D- statt 3D-2D-Registrierung. Q4 ist in drei Tagen nicht zu lösen.
 - Lizenz von stEVE geklärt (MIT); Download- und Lizenzlage von CathAction
   noch nicht.
+- **Unser Experte ist ein Skript, kein Arzt.** Siehe Abschnitt 0.
+- **C-Arm-Verstellung fehlt ganz.** In Simulation ist der Projektionswinkel ein
+  Kameraparameter und damit billig nachrüstbar. Entscheidung am Event, nicht
+  vorher.
 
 ## 8. Quellen
 
