@@ -16,7 +16,12 @@ policy that cannot, and then stays in the room as the referee the gate compares
 against.
 
 That single mechanism answers three of their four bullets. The fourth, C-arm
-auto-adjustment, we have not addressed — say so rather than implying otherwise.
+auto-adjustment, is answered by the same asymmetry rather than beside it: a
+student that may not look at the vessel graph has to get the information out of
+the projection, and in a view where two branches overlap there is none to get.
+So the planner scores 703 angles, asks for the one that separates them, and the
+gate releases the gantry only while the wire is still. Built 16 Oct, runs in the
+demo with no hardware.
 
 **New jury question, and it is the obvious one:** *your expert is a script, not
 a physician.* The answer is in their own wording, "manual **or simulated**
@@ -131,7 +136,11 @@ Three sentences that are true because the code runs, not because we claim them:
 - The 3 mm/s advance limit is derived, not chosen: 0.39 mm per pixel divided by
   one frame period is the fastest advance that keeps visual servoing inside one
   pixel per correction.
-- The safety gate is one place with four conditions, and we can trip it live.
+- The safety gate is one place with six conditions guarding two actuators, and
+  `tools/fault.py` trips three of them live, on the same topics the policies
+  use: deviation veto, rate clamp, one-actuator-at-a-time interlock.
+- The C-arm is part of the control loop, not the setup: separation 0.00 at PA
+  in our scene, 0.54 at the angle the planner asks for.
 
 ## 7. Framing
 

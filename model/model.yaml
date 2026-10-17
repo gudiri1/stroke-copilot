@@ -273,11 +273,17 @@ blocks:
   CARM.EXEC:
     name: Gantry motion
     owner: EMB
-    stage: 4
-    status: open
-    note: In simulation the angle is a camera parameter and free. Moving a real
-      gantry with a patient on the table is a safety-regulated motion and a
-      separate certification problem. Say that rather than implying we move it.
+    stage: 2
+    status: building
+    note: Simulated gantry, running today in src/source_replay.py. It slews at
+      240 deg/s instead of teleporting and stamps the angle it is actually at
+      into every frame, so nothing downstream guesses the geometry.
+    detail:
+      - A -70/+40 move takes 0.46 s, which is 3.5 frames at 7.5 Hz
+      - Subscribes view_gated only, never view
+      - Moving a REAL gantry with a patient on the table is a safety-regulated
+        motion and a separate certification problem. We simulate it and say so.
+    questions: [T1]
 
   SC.DRV:
     name: Driver interface
